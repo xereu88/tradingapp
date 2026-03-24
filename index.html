@@ -241,6 +241,12 @@ select.pi option{background:var(--card);}
 .psl{font-family:var(--mono);font-size:.54rem;color:var(--muted);text-transform:uppercase;margin-bottom:3px;}
 .psv{font-family:var(--mono);font-size:.85rem;font-weight:700;}
 
+.trbtn-group{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;}
+.trbtn{padding:6px 14px;border-radius:6px;border:2px solid var(--b2);background:var(--s2);
+  cursor:pointer;font-family:var(--mono);font-size:.7rem;color:var(--sub);transition:all .15s;}
+.trbtn:hover{border-color:var(--b3);color:var(--text);}
+.trbtn.on{border-color:var(--cyan);background:rgba(0,217,245,.08);color:var(--cyan);font-weight:700;}
+.prbig{display:flex;flex-direction:column;gap:6px;}
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--b2);border-radius:2px;}
@@ -452,18 +458,41 @@ select.pi option{background:var(--card);}
       <!-- LIVE EVENT FILTERS -->
       <div class="pcard">
         <div class="pcard-title">🎯 Live Event Filters</div>
-        <div class="pcard-sub">Only trade markets that are live or about to resolve — not markets days away.</div>
-        <div class="pgrid2">
-          <div class="pr">
-            <label class="pl">Max Hours to Close</label>
-            <div class="plh">Only trade markets closing within this window (4 = live games)</div>
-            <input class="pi" type="number" id="p_max_hrs" min="0.5" max="24" step="0.5"/>
+        <div class="pcard-sub">Only trade markets that are live or about to close. Select a window below — changes apply on next scan.</div>
+
+        <div class="prbig" style="margin-bottom:16px">
+          <label class="pl">Max Time to Close</label>
+          <div class="plh" style="margin-bottom:6px">Bot skips any market closing further out than this</div>
+          <div class="trbtn-group" id="trBtnGroup">
+            <div class="trbtn" onclick="setTimeRange(0.25)" data-val="0.25">15 min</div>
+            <div class="trbtn" onclick="setTimeRange(0.5)"  data-val="0.5">30 min</div>
+            <div class="trbtn on" onclick="setTimeRange(1)"   data-val="1">1 hour</div>
+            <div class="trbtn" onclick="setTimeRange(2)"   data-val="2">2 hours</div>
+            <div class="trbtn" onclick="setTimeRange(4)"   data-val="4">4 hours</div>
+            <div class="trbtn" onclick="setTimeRange(8)"   data-val="8">8 hours</div>
+            <div class="trbtn" onclick="setTimeRange(24)"  data-val="24">24 hours</div>
           </div>
-          <div class="pr">
-            <label class="pl">Min Win Price (¢)</label>
-            <div class="plh">Best side must be at least this price (75 = 75% probability)</div>
-            <input class="pi" type="number" id="p_min_price" min="50" max="99" step="1"/>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+            <span style="font-family:var(--mono);font-size:.62rem;color:var(--muted)">Custom:</span>
+            <input class="pi" type="number" id="p_max_hrs" min="0.25" max="48" step="0.25"
+              style="width:90px" oninput="syncTimeRangeBtns(this.value)"/>
+            <span style="font-family:var(--mono);font-size:.62rem;color:var(--muted)">hours</span>
           </div>
+        </div>
+
+        <div class="pr">
+          <label class="pl">Min Win Probability</label>
+          <div class="plh">Best side (YES or NO) must be at least this confident</div>
+          <div class="trbtn-group" id="winBtnGroup">
+            <div class="trbtn" onclick="setMinPrice(60)" data-val="60">60¢+</div>
+            <div class="trbtn" onclick="setMinPrice(65)" data-val="65">65¢+</div>
+            <div class="trbtn" onclick="setMinPrice(70)" data-val="70">70¢+</div>
+            <div class="trbtn on" onclick="setMinPrice(75)" data-val="75">75¢+</div>
+            <div class="trbtn" onclick="setMinPrice(80)" data-val="80">80¢+</div>
+            <div class="trbtn" onclick="setMinPrice(85)" data-val="85">85¢+</div>
+            <div class="trbtn" onclick="setMinPrice(90)" data-val="90">90¢+</div>
+          </div>
+          <input type="hidden" id="p_min_price" value="75"/>
         </div>
       </div>
 
@@ -897,8 +926,12 @@ async function loadParams() {
     document.getElementById('p_dll').value       = p.daily_loss_limit;
     document.getElementById('p_scan').value      = p.scan_interval;
     document.getElementById('p_monitor').value   = p.monitor_interval;
-    document.getElementById('p_max_hrs').value   = p.max_hours_to_close || 1.0;
-    document.getElementById('p_min_price').value = p.min_win_price || 75;
+    const maxHrs = p.max_hours_to_close || 1.0;
+    document.getElementById('p_max_hrs').value   = maxHrs;
+    syncTimeRangeBtns(maxHrs);
+    const minPrice = p.min_win_price || 75;
+    document.getElementById('p_min_price').value = minPrice;
+    setMinPrice(minPrice);
     const expPct=Math.round((p.max_total_exposure_pct||0.5)*100);
     document.getElementById('s_exp').value=expPct;
     document.getElementById('expValDisp').textContent=expPct+'%';
@@ -946,6 +979,23 @@ async function saveParams() {
 }
 
 // ── TOAST ─────────────────────────────────────────────────
+function setTimeRange(val) {
+  document.getElementById('p_max_hrs').value = val;
+  syncTimeRangeBtns(val);
+}
+function syncTimeRangeBtns(val) {
+  const v = parseFloat(val);
+  document.querySelectorAll('#trBtnGroup .trbtn').forEach(b => {
+    b.classList.toggle('on', parseFloat(b.dataset.val) === v);
+  });
+}
+function setMinPrice(val) {
+  document.getElementById('p_min_price').value = val;
+  document.querySelectorAll('#winBtnGroup .trbtn').forEach(b => {
+    b.classList.toggle('on', parseInt(b.dataset.val) === val);
+  });
+}
+
 function toast(msg,type='ok'){
   let t=document.getElementById('_toast');
   if(!t){t=document.createElement('div');t.id='_toast';

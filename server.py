@@ -184,6 +184,51 @@ def debug_history():
     })
 
 
+@app.route('/api/debug/closetimes')
+def debug_closetimes():
+    """Show close times for current markets to verify the 1h filter is working."""
+    import time
+    from executor import _rest_get
+    data    = _rest_get('/trade-api/v2/markets?limit=20&status=open&mve_filter=exclude')
+    markets = data.get('markets', [])
+    now     = time.time()
+    result  = []
+    for m in markets:
+        close_raw = m.get('close_time') or m.get('expiration_time') or ''
+        close_ts  = None
+        if close_raw:
+            try:
+                from datetime import datetime, timezone
+                close_ts = datetime.fromisoformat(str(close_raw).replace('Z','+00:00')).timestamp()
+            except Exception:
+                pass
+        hours = round((close_ts - now) / 3600, 2) if close_ts else None
+        result.append({
+            'ticker':        m.get('ticker',''),
+            'title':         m.get('title',''),
+            'close_time':    close_raw,
+            'hours_to_close': hours,
+            'passes_1h_filter': hours is not None and 0 <= hours <= 1.0,
+        })
+    result.sort(key=lambda x: x['hours_to_close'] if x['hours_to_close'] is not None else 9999)
+    return jsonify({'markets': result, 'max_hours_setting': state.params.get('max_hours_to_close', 1.0)})
+
+@app.route('/api/params/reset', methods=['POST'])
+def reset_params():
+    """Clear saved strategy.json and reload defaults. Fixes stale cached params."""
+    import os
+    strategy_file = '/tmp/kalshi_strategy.json'
+    if os.path.exists(strategy_file):
+        os.remove(strategy_file)
+    # Reload defaults from state module
+    import importlib
+    import state as st
+    st.params['max_hours_to_close'] = 1.0
+    st.params['min_win_price']      = 75
+    state.log('info', '[API] Params reset to defaults')
+    return jsonify({'ok': True, 'msg': 'Params reset. max_hours_to_close=1.0, min_win_price=75'})
+
+
 # ── FULL DASHBOARD DATA ───────────────────────────────────
 
 @app.route('/api/dashboard')

@@ -129,8 +129,10 @@ def run_signal_scan():
             if hours_to_close < 0:
                 type_counts['skipped'] += 1
                 continue  # already closed
+            # Log markets that pass the time filter so we can verify
+            state.log('info', f'[BOT] {ticker}: closes in {hours_to_close:.1f}h ✓')
         else:
-            # No close time — skip, can't verify it's live
+            # No close time returned by API — skip
             type_counts['skipped'] += 1
             continue
 
